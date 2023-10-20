@@ -44,6 +44,18 @@ The landmark model currently included in MediaPipe Pose predicts the location of
 --static-image-mode   Enables static image mode.
 ```
 
+
+### Running with Tensorflow cuda
+
+Install Tensorflow and cuda with:
+
+    pip install tensorflow[and-cuda]
+
+Verify the GPU setup:
+
+    python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+
+
 #### Format
 
 - `count` - Indicates how many poses are detected (currently only `0` or `1`)
@@ -179,4 +191,3 @@ Currently, there are very basic receiver examples for processing. Check out the 
 
 ### About
 * Example code and documentation adapted from [google/mediapipe](https://google.github.io/mediapipe/solutions/)
-* OSC sending and examples implemented by [cansik](https://github.com/cansik)

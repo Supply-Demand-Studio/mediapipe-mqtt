@@ -5,14 +5,25 @@ import mediapipe as mp
 import paho.mqtt.client as mqtt
 import numpy as np
 from mediapipe.framework.formats import landmark_pb2
-
-
 from utils import add_default_args, get_video_input
+import time 
+import tensorflow as tf
+
+#Tendsorflow setup fopr GPU
+physical_devices = tf.config.list_physical_devices('GPU')
+if len(physical_devices) > 0:
+    tf.config.experimental.set_memory_growth(physical_devices[0], True)
+# Configurable parameters for rate limiting
+detections_per_second = 10  # Adjust this to the desired rate (e.g., 2 detections per second)
+time_interval = 1.0 / detections_per_second  # Calculate the time interval
+
 
 # MQTT Broker Configuration
 MQTT_BROKER_HOST = "10.0.0.71"
 MQTT_BROKER_PORT = 1883
 MQTT_TOPIC_PREFIX = "/detections/1/pose/landmarks/"
+DETECTION_ID = 1  # Replace with your desired detection ID
+VISIBILITY_THRESHOLD = 0.5
 
 # Initialize MQTT client
 client = mqtt.Client()
@@ -45,6 +56,43 @@ client.connect(MQTT_BROKER_HOST, MQTT_BROKER_PORT)
 mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
 
+# List of landmark names
+LANDMARK_NAMES = [
+    "nose",
+    "left_eye_inner",
+    "left_eye",
+    "left_eye_outer",
+    "right_eye_inner",
+    "right_eye",
+    "right_eye_outer",
+    "left_ear",
+    "right_ear",
+    "mouth_left",
+    "mouth_right",
+    "left_shoulder",
+    "right_shoulder",
+    "left_elbow",
+    "right_elbow",
+    "left_wrist",
+    "right_wrist",
+    "left_pinky",
+    "right_pinky",
+    "left_index",
+    "right_index",
+    "left_thumb",
+    "right_thumb",
+    "left_hip",
+    "right_hip",
+    "left_knee",
+    "right_knee",
+    "left_ankle",
+    "right_ankle",
+    "left_heel",
+    "right_heel",
+    "left_foot_index",
+    "right_foot_index",
+]
+
 
 def draw_pose_rect(image, rect, color=(255, 0, 255), thickness=2):
     image_width = image.shape[1]
@@ -58,22 +106,29 @@ def draw_pose_rect(image, rect, color=(255, 0, 255), thickness=2):
     box = np.int0(box)
     cv2.drawContours(image, [box], 0, color, thickness)
 
-
+# Normalized Landmark represents a point in 3D space with x, y, z coordinates. x and y are normalized to [0.0, 1.0] 
 def send_pose(client: mqtt.Client,
               landmark_list: landmark_pb2.NormalizedLandmarkList):
     if landmark_list is None:
         return
 
+    #print(landmark_list)
+    num_visible_landmarks = 0  # Initialize a counter for the number of visible landmarks
+
     for idx, landmark in enumerate(landmark_list.landmark):
-        landmark_data = {
-            "x": landmark.x,
-            "y": landmark.y,
-            "z": landmark.z if hasattr(landmark, 'z') else 0.0,
-            "visibility": landmark.visibility
-        }
-        topic = MQTT_TOPIC_PREFIX + str(idx)
-        payload = f'{{"x": {landmark_data["x"]}, "y": {landmark_data["y"]}, "z": {landmark_data["z"]}, "visibility": {landmark_data["visibility"]}}}'
-        client.publish(topic, payload)
+        if landmark.visibility > VISIBILITY_THRESHOLD:  # Check landmark visibility
+            num_visible_landmarks += 1  # Increment the counter for each detected landmark
+            landmark_data = {
+                "x": landmark.x,
+                "y": landmark.y,
+                "z": landmark.z if hasattr(landmark, 'z') else 0.0,
+                "visibility": landmark.visibility
+            }
+            landmark_name = LANDMARK_NAMES[idx] # Get landmark name
+            topic = f"/detections/{DETECTION_ID}/pose/landmarks/{landmark_name}"
+            payload = f'{{"x": {landmark_data["x"]}, "y": {landmark_data["y"]}, "z": {landmark_data["z"]}, "visibility": {landmark_data["visibility"]}}}'
+            client.publish(topic, payload)
+    print(f"Number of detected landmarks: {num_visible_landmarks}")
 
 def main():
     # read arguments
@@ -101,6 +156,7 @@ def main():
     connections = mp_pose.POSE_CONNECTIONS
 
     while cap.isOpened():
+        start_time = time.time()  # Record the start time of each iteration
         success, frame = cap.read()
         if not success:
             break
@@ -127,6 +183,14 @@ def main():
         mp_drawing.draw_landmarks(frame, results.pose_landmarks, connections)
         # Display the frame
         cv2.imshow("Pose Landmarks", frame)
+
+        end_time = time.time()  # Record the end time of each iteration
+        elapsed_time = end_time - start_time  # Calculate the time elapsed during processing
+
+        if elapsed_time < time_interval:
+            # If processing took less time than the desired interval, sleep for the difference
+            time.sleep(time_interval - elapsed_time)
+
         if cv2.waitKey(5) & 0xFF == 27: #ESC
             break
     pose.close()

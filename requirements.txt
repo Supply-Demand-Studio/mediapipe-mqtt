@@ -1,3 +1,4 @@
 mediapipe
 opencv-python
 paho-mqtt
+tensorflow[and-cuda]
