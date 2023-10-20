@@ -2,14 +2,48 @@ import argparse
 
 import cv2
 import mediapipe as mp
+import paho.mqtt.client as mqtt
 import numpy as np
 from mediapipe.framework.formats import landmark_pb2
-from pythonosc import udp_client
-from pythonosc.osc_message_builder import OscMessageBuilder
+
 
 from utils import add_default_args, get_video_input
 
-OSC_ADDRESS = "/mediapipe/pose"
+# MQTT Broker Configuration
+MQTT_BROKER_HOST = "10.0.0.71"
+MQTT_BROKER_PORT = 1883
+MQTT_TOPIC_PREFIX = "/detections/1/pose/landmarks/"
+
+# Initialize MQTT client
+client = mqtt.Client()
+
+# Callback function to be called when the client connects to the MQTT broker
+def on_connect(client, userdata, flags, rc):
+    if rc == 0:
+        print("Connected to MQTT broker")
+    else:
+        print(f"Connection failed with error code {rc}")
+
+# Callback function to be called when the client disconnects from the MQTT broker
+def on_disconnect(client, userdata, rc):
+    if rc != 0:
+        print(f"Unexpected disconnection. Error code: {rc}")
+    else:
+        print("Disconnected from MQTT broker")
+
+# Set up the callback functions
+client.on_connect = on_connect
+client.on_disconnect = on_disconnect
+
+# Start the MQTT client loop (if needed)
+client.loop_start()
+
+# Connect client to broker
+client.connect(MQTT_BROKER_HOST, MQTT_BROKER_PORT)
+
+# Initialize MediaPipe Pose
+mp_drawing = mp.solutions.drawing_utils
+mp_pose = mp.solutions.pose
 
 
 def draw_pose_rect(image, rect, color=(255, 0, 255), thickness=2):
@@ -25,23 +59,21 @@ def draw_pose_rect(image, rect, color=(255, 0, 255), thickness=2):
     cv2.drawContours(image, [box], 0, color, thickness)
 
 
-def send_pose(client: udp_client,
+def send_pose(client: mqtt.Client,
               landmark_list: landmark_pb2.NormalizedLandmarkList):
     if landmark_list is None:
-        client.send_message(OSC_ADDRESS, 0)
         return
 
-    # create message and send
-    builder = OscMessageBuilder(address=OSC_ADDRESS)
-    builder.add_arg(1)
-    for landmark in landmark_list.landmark:
-        builder.add_arg(landmark.x)
-        builder.add_arg(landmark.y)
-        builder.add_arg(landmark.z)
-        builder.add_arg(landmark.visibility)
-    msg = builder.build()
-    client.send(msg)
-
+    for idx, landmark in enumerate(landmark_list.landmark):
+        landmark_data = {
+            "x": landmark.x,
+            "y": landmark.y,
+            "z": landmark.z if hasattr(landmark, 'z') else 0.0,
+            "visibility": landmark.visibility
+        }
+        topic = MQTT_TOPIC_PREFIX + str(idx)
+        payload = f'{{"x": {landmark_data["x"]}, "y": {landmark_data["y"]}, "z": {landmark_data["z"]}, "visibility": {landmark_data["visibility"]}}}'
+        client.publish(topic, payload)
 
 def main():
     # read arguments
@@ -52,9 +84,6 @@ def main():
     parser.add_argument("--no-smooth-landmarks", action="store_false", help="Disable landmark smoothing.")
     parser.add_argument("--static-image-mode", action="store_true", help="Enables static image mode.")
     args = parser.parse_args()
-
-    # create osc client
-    client = udp_client.SimpleUDPClient(args.ip, args.port, True)
 
     # setup camera loop
     mp_drawing = mp.solutions.drawing_utils
@@ -72,13 +101,14 @@ def main():
     connections = mp_pose.POSE_CONNECTIONS
 
     while cap.isOpened():
-        success, image = cap.read()
+        success, frame = cap.read()
         if not success:
             break
 
         # Flip the image horizontally for a later selfie-view display, and convert
         # the BGR image to RGB.
-        image = cv2.cvtColor(cv2.flip(image, 1), cv2.COLOR_BGR2RGB)
+        #image = cv2.cvtColor(cv2.flip(frame, 1), cv2.COLOR_BGR2RGB)
+        image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         # To improve performance, optionally mark the image as not writeable to
         # pass by reference.
         image.flags.writeable = False
@@ -94,13 +124,14 @@ def main():
         image.flags.writeable = True
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
-        mp_drawing.draw_landmarks(image, results.pose_landmarks, connections)
-        cv2.imshow('MediaPipe OSC Pose', image)
-        if cv2.waitKey(5) & 0xFF == 27:
+        mp_drawing.draw_landmarks(frame, results.pose_landmarks, connections)
+        # Display the frame
+        cv2.imshow("Pose Landmarks", frame)
+        if cv2.waitKey(5) & 0xFF == 27: #ESC
             break
     pose.close()
     cap.release()
-
+    cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     main()

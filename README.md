@@ -1,5 +1,5 @@
-# MediaPipe OSC
-[MediaPipe](https://google.github.io/mediapipe/) examples which stream their detections over OSC to be used in other applications.
+# MediaPipe MQTT
+[MediaPipe](https://google.github.io/mediapipe/) examples which stream their detections to a MQTT broker to be used in other applications.
 
 ### Install & Run
 
@@ -24,8 +24,8 @@ Other parameters are documented in the following list or algorithm specific.
 - **input** - The video input path or video camera id (default `0`)
 - **min-detection-confidence** - Minimum confidence value ([0.0, 1.0]) for the detection to be considered successful. (default `0.5`)
 - **min-tracking-confidence** - Minimum confidence value ([0.0, 1.0]) to be considered tracked successfully. (default `0.5`)
-- **ip** - OSC ip address to send to (default `127.0.0.1`)
-- **port** - OSC port to send to (default `7500`)
+- **ip** - MQTT Broker address to send to (default `127.0.0.1`)
+- **port** - MQTT port to send to (default `7500`)
 
 ### Full-Body Pose Landmark Model (BlazePose Tracker)
 The landmark model currently included in MediaPipe Pose predicts the location of 33 full-body landmarks (see figure below), each with (`x, y, z, visibility`). Note that the z value should be discarded as the model is currently not fully trained to predict depth, but this is something we have on the roadmap.
@@ -54,7 +54,86 @@ The landmark model currently included in MediaPipe Pose predicts the location of
     - `visibility` - Visibility of the landmark
 
 ```
-/mediapipe/pose [count, x, y, z, visibility, x, y, z, visibility ...]
+/detections/<id>/pose/landmarks/<landmark>/ [x, y, z, visibility]
+
+#detailed landmarks
+/detections/<id>/pose/landmarks
+    /nose
+        /x
+        /y
+        /z
+        /visibility
+    /left_eye
+        /x
+        /y
+        /z
+        /visibility
+    /right_eye
+        /x
+        /y
+        /z
+        /visibility
+    /left_ear
+        /x
+        /y
+        /z
+        /visibility
+    /right_ear
+        /x
+        /y
+        /z
+        /visibility
+    /left_shoulder
+        /x
+        /y
+        /z
+        /visibility
+    /right_shoulder
+        /x
+        /y
+        /z
+        /visibility
+    /left_elbow
+        /x
+        /y
+        /z
+        /visibility
+    /right_elbow
+        /x
+        /y
+        /z
+        /visibility
+    /left_wrist
+        /x
+        /y
+        /z
+        /visibility
+    /right_wrist
+        /x
+        /y
+        /z
+        /visibility
+    /left_hip
+        /x
+        /y
+        /z
+        /visibility
+    /right_hip
+        /x
+        /y
+        /z
+        /visibility
+    /left_knee
+        /x
+        /y
+        /z
+        /visibility
+    /right_knee
+        /x
+        /y
+        /z
+        /visibility
+
 ```
 
 ### Hand Detection
